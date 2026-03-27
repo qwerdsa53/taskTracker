@@ -1,0 +1,31 @@
+# Docker / Karate E2E (docker-compose.karate.yml). JDBC/Redis через env (SPRING_DATASOURCE_URL, SPRING_DATA_REDIS_HOST).
+spring:
+  config:
+    activate:
+      on-profile: karate
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+app:
+  mail:
+    enabled: false
+  jwt:
+    secret: ${JWT_SECRET:karate-test-secret-min-32-chars-for-hs256!!}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true

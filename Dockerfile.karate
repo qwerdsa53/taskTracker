@@ -1,0 +1,6 @@
+# Build context: repository root. Requires: ./gradlew :task-tracker-api:bootJar
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+COPY task-tracker-api/build/libs/task-tracker-api.jar app.jar
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

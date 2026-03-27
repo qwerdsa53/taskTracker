@@ -1,0 +1,52 @@
+spring:
+  application:
+    name: task-tracker-scheduler
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:tasktracker}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+
+# Swagger UI: /swagger-ui/index.html (or / with redirect-root-to-swagger). OpenAPI JSON: /v3/api-docs
+springdoc:
+  api-docs:
+    version: OPENAPI_3_0
+  swagger-ui:
+    path: /swagger-ui.html
+  packages-to-scan: edu.mirea.qwerdsa53.taskTracker.scheduler.admin
+
+app:
+  openapi:
+    title: Task Tracker Scheduler
+    description: Scheduler REST API (jobs, health). Same port as server (default 8081).
+    version: 0.0.1
+    # SpringDoc UI is at /swagger-ui.html; this maps / to that URL.
+    redirect-root-to-swagger: true
+
+# Scheduler runs on its own port (8080 only if you do not run task-tracker-api on the same host).
+server:
+  port: ${SCHEDULER_SERVER_PORT:8081}
+
+scheduler:
+  reminder:
+    initial-delay-ms: 15000
+    poll-interval-ms: 60000
+    # Optional: set a cron expression to override fixed-delay (Spring six-field cron).
+    cron: ""
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+# Temporal: see docker-compose.temporal.yml and scripts/temporal-up.sh. If false, jobs run via Spring SchedulingConfigurer only.
+temporal:
+  enabled: true
+  target: ${TEMPORAL_TARGET:127.0.0.1:7233}
+  namespace: default
+  task-queue: task-tracker-reminders
+  polling-workflow-id: reminder-polling-global

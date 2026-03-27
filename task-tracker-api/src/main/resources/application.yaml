@@ -1,0 +1,44 @@
+# Base defaults; environment-specific files:
+# application-development.yaml, application-integration.yaml, application-local.yaml,
+# application-testing.yaml, application-prestable.yaml, application-production.yaml
+spring:
+  application:
+    name: taskTracker
+  profiles:
+    active: local
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        default_batch_fetch_size: 16
+
+# Swagger UI: /swagger-ui/index.html (or /swagger-ui.html). OpenAPI JSON: /v3/api-docs
+springdoc:
+  api-docs:
+    version: OPENAPI_3_0
+  swagger-ui:
+    path: /swagger-ui.html
+  # REST controllers only (avoids mixing with GraphQL / other stacks)
+  packages-to-scan: edu.mirea.qwerdsa53.taskTracker.api.web
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:dev-only-change-me-use-at-least-32-chars-secret-key-for-hs256}
+    access-ttl: ${JWT_ACCESS_TTL:15m}
+    refresh-ttl: ${JWT_REFRESH_TTL:7d}
+  openapi:
+    title: Task Tracker API
+    description: REST API under /api/v1
+    version: 0.0.1
+    redirect-root-to-swagger: true
+  mail:
+    enabled: true
+    from-address: ${MAIL_FROM:${YANDEX_EMAIL:}}
+    verification-token-ttl: ${MAIL_VERIFICATION_TOKEN_TTL:24h}
+    verification-base-url: ${APP_VERIFICATION_BASE_URL:http://localhost:8080}
+    verification:
+      subject: "Confirm email — Task Tracker"

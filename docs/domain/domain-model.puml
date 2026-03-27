@@ -1,0 +1,141 @@
+@startuml domain-model
+' Вёрстка без Graphviz (dot). Если нужен dot: brew install graphviz и путь к dot в настройках плагина.
+!pragma layout smetana
+!theme plain
+title Трекер привычек — модель предметной области (UML 2)
+
+skinparam classAttributeIconSize 0
+skinparam roundcorner 8
+skinparam packageStyle rectangle
+
+' --- Перечисления (дни недели; в коде может быть java.time.DayOfWeek) ---
+enum DayOfWeek <<enumeration>> {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum FrequencyType <<enumeration>> {
+  EVERY_DAY
+  TIMES_PER_WEEK
+  ON_SELECTED_WEEKDAYS
+}
+
+package "Пользователь" {
+  class User <<aggregate root>> {
+    +id : Long
+    +email : String
+    +passwordHash : String
+    +username : String
+    +timezone : String
+    +createdAt : Instant
+    +updatedAt : Instant
+  }
+  note right of User
+    Инвариант: email уникален в системе.
+    Атрибут timezone задаёт календарный день
+    для отметок и напоминаний.
+  end note
+}
+
+package "Привычка" {
+  class Habit <<aggregate root>> {
+    +id : Long
+    +ownerId : Long
+    +title : String
+    +description : String
+    +color : String
+    +iconKey : String
+    +archived : Boolean
+    +createdAt : Instant
+    +updatedAt : Instant
+  }
+  note bottom of Habit
+    ownerId — ссылка на User (граница агрегата).
+  end note
+
+  class Frequency <<value object>> {
+    +type : FrequencyType
+    +targetPerWeek : Integer
+  }
+  note right of Frequency
+    targetPerWeek — при TIMES_PER_WEEK.
+    Набор дней недели — связь activeWeekdays.
+  end note
+}
+
+package "Факт выполнения" {
+  class HabitCompletion <<entity>> {
+    +id : Long
+    +completedOn : LocalDate
+    +note : String
+    +quantity : Integer
+    +createdAt : Instant
+  }
+  note bottom of HabitCompletion
+    Инвариант: для пары (привычка, дата)
+    не более одной записи либо явная
+    семантика quantity по правилам продукта.
+    Дата в календаре владельца (User.timezone).
+  end note
+}
+
+package "Напоминания" {
+  class Reminder <<entity>> {
+    +id : Long
+    +enabled : Boolean
+    +localTime : LocalTime
+  }
+  note right of Reminder
+    localTime в локальной зоне пользователя;
+    планировщик переводит в UTC.
+  end note
+}
+
+package "Проекции и запросы" #E8F4F8 {
+  class StreakView <<read model>> {
+    +habitId : Long
+    +currentLength : Integer
+    +longest : Integer
+  }
+  class PresenceView <<read model>> {
+    +userId : Long
+    +lastSeenAt : Instant
+    +online : Boolean
+  }
+}
+
+' --- Связи: кратности и роли по UML ---
+
+User "1" ---- "0..*" Habit : владелец
+
+' type: FrequencyType задан атрибутом Frequency; дни недели — отдельная ассоциация
+Frequency "1" o-- "0..7" DayOfWeek : activeWeekdays
+
+Habit "1" *-- "1" Frequency : schedule
+
+Habit "1" *-- "0..*" HabitCompletion : журнал
+
+Habit "1" *-- "0..*" Reminder : напоминания
+
+Reminder "1" o-- "1..7" DayOfWeek : weekdays
+
+StreakView ..> Habit : по habitId
+StreakView ..> HabitCompletion : по отметкам
+PresenceView ..> User : по userId
+
+note bottom of PresenceView
+  Онлайн / last seen — типично Redis;
+  в Postgres не хранить как единственный источник истины.
+end note
+
+note bottom of StreakView
+  Расчёт при запросе или материализация
+  при записи HabitCompletion — решение реализации.
+end note
+
+@enduml

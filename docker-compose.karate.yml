@@ -1,0 +1,50 @@
+# E2E / Karate: Postgres (фикстуры), Redis, API. Порты хоста: KARATE_DB_PORT (5435), KARATE_APP_PORT (8080).
+# Запуск: ./gradlew :task-tracker-api:karateE2e  или  bash scripts/karate-e2e.sh
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: tasktracker-karate-redis
+    ports:
+      - "${KARATE_REDIS_PORT:-6379}:6379"
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: tasktracker-karate-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: tasktracker
+    ports:
+      - "${KARATE_DB_PORT:-5435}:5432"
+    volumes:
+      - tasktracker_karate_pgdata:/var/lib/postgresql/data
+      - ./fixtures:/fixtures:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tasktracker"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.karate
+    image: tasktracker-api:karate
+    container_name: tasktracker-karate-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      SPRING_PROFILES_ACTIVE: karate
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tasktracker
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
+      APP_MAIL_ENABLED: "false"
+      JWT_SECRET: karate-test-secret-min-32-chars-for-hs256!!
+    ports:
+      - "${KARATE_APP_PORT:-8080}:8080"
+
+volumes:
+  tasktracker_karate_pgdata:

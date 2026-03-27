@@ -1,0 +1,4 @@
+# Placeholder for codegen; replace when a real schema exists.
+type Query {
+	_placeholder: String
+}

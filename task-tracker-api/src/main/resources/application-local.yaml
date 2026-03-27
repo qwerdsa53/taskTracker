@@ -1,0 +1,35 @@
+# Local dev: PostgreSQL on localhost:5432.
+# Yandex SMTP: set YANDEX_EMAIL / YANDEX_PASSWORD or MAIL_USERNAME / MAIL_PASSWORD (app password: https://id.yandex.ru/security).
+# MAIL_* wins when set; else YANDEX_*. From: MAIL_FROM or YANDEX_EMAIL. Disable mail: APP_MAIL_ENABLED=false.
+app:
+  mail:
+    enabled: ${APP_MAIL_ENABLED:true}
+
+spring:
+  config:
+    activate:
+      on-profile: local
+  mail:
+    host: smtp.yandex.ru
+    port: 465
+    username: ${MAIL_USERNAME:${YANDEX_EMAIL:}}
+    password: ${MAIL_PASSWORD:${YANDEX_PASSWORD:}}
+    properties:
+      "[mail.smtp.auth]": true
+      "[mail.smtp.ssl.enable]": true
+      "[mail.smtp.ssl.trust]": smtp.yandex.ru
+    default-encoding: UTF-8
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:tasktracker}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}

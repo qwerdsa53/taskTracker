@@ -1,0 +1,49 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: tasktracker-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+
+  # Main app / local dev: host port DB_PORT (default 5432). Reset fixtures: scripts/fixture-db.sh
+  # Named volume: data survives restarts; wipe with `docker compose down -v`.
+  postgres:
+    image: postgres:16-alpine
+    container_name: tasktracker-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: tasktracker
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - tasktracker_pgdata:/var/lib/postgresql/data
+      - ./fixtures:/fixtures:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tasktracker"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  # Integration tests (profile integration): host port DB_INTEGRATION_PORT (default 5433). Reset: scripts/fixture-db-integration.sh
+  postgres-integration:
+    image: postgres:16-alpine
+    container_name: tasktracker-postgres-integration
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: tasktracker
+    ports:
+      - "${DB_INTEGRATION_PORT:-5433}:5432"
+    volumes:
+      - tasktracker_pgdata_integration:/var/lib/postgresql/data
+      - ./fixtures:/fixtures:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tasktracker"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  tasktracker_pgdata:
+  tasktracker_pgdata_integration:
