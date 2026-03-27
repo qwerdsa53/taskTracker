@@ -1,8 +1,3 @@
-# Local Temporal stack (dedicated Postgres — not the tasktracker DB).
-# Start: bash scripts/temporal-up.sh
-# Manual: docker compose -f docker-compose.temporal.yml up -d
-# UI: http://localhost:8233  |  gRPC: localhost:7233
-# Env reference: https://github.com/temporalio/docker-compose
 services:
   temporal-postgresql:
     container_name: temporal-postgresql
@@ -48,7 +43,6 @@ services:
     image: temporalio/ui:2.34.0
     networks:
       - temporal-network
-    # Image listens on 8080 inside the container; host uses TEMPORAL_UI_PORT (default 8233).
     ports:
       - "${TEMPORAL_UI_PORT:-8233}:8080"
 

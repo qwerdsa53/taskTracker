@@ -5,8 +5,6 @@ services:
     ports:
       - "${REDIS_PORT:-6379}:6379"
 
-  # Main app / local dev: host port DB_PORT (default 5432). Reset fixtures: scripts/fixture-db.sh
-  # Named volume: data survives restarts; wipe with `docker compose down -v`.
   postgres:
     image: postgres:16-alpine
     container_name: tasktracker-postgres
@@ -25,7 +23,6 @@ services:
       timeout: 3s
       retries: 10
 
-  # Integration tests (profile integration): host port DB_INTEGRATION_PORT (default 5433). Reset: scripts/fixture-db-integration.sh
   postgres-integration:
     image: postgres:16-alpine
     container_name: tasktracker-postgres-integration
