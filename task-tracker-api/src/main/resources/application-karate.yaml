@@ -1,4 +1,4 @@
-# Docker / Karate E2E (docker-compose.karate.yml). JDBC/Redis через env (SPRING_DATASOURCE_URL, SPRING_DATA_REDIS_HOST).
+# Karate E2E profile. Used by docker-compose.karate.yml.
 spring:
   config:
     activate:

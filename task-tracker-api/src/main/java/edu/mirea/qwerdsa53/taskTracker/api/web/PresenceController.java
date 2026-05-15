@@ -9,9 +9,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import edu.mirea.qwerdsa53.taskTracker.presence.OnlineCountPayload;
 import edu.mirea.qwerdsa53.taskTracker.presence.OnlinePresenceService;
 
-/**
- * HTTP snapshot of online count; live updates use STOMP subscribe to {@link OnlinePresenceService#PRESENCE_TOPIC}.
- */
+// REST snapshot of the online count. Live updates come via STOMP topic /topic/presence.
 @RestController
 @RequestMapping("/api/v1/presence")
 @SecurityRequirement(name = "bearer-jwt")

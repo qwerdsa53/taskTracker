@@ -7,14 +7,14 @@ public class TemporalProperties {
 
 	private boolean enabled = true;
 
-	/** Temporal frontend gRPC address (host:port). */
+	// Temporal server address (host:port)
 	private String target = "127.0.0.1:7233";
 
 	private String namespace = "default";
 
 	private String taskQueue = "task-tracker-reminders";
 
-	/** Fixed workflow id for the long-running reminder poll (survives worker restarts). */
+	// Stable workflow id so reminder polling survives worker restarts
 	private String pollingWorkflowId = "reminder-polling-global";
 
 	private int activityTimeoutSeconds = 30;

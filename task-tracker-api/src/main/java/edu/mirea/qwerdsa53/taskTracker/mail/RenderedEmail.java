@@ -1,6 +1,5 @@
 package edu.mirea.qwerdsa53.taskTracker.mail;
 
-/** Email subject and HTML body produced by {@link MailTemplateService}. */
 public record RenderedEmail(String subject, String htmlBody) {
 
 	public RenderedEmail {

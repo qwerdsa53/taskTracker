@@ -12,10 +12,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springdoc.core.customizers.OpenApiCustomizer;
 
-/**
- * Do not register a separate {@link OpenAPI} bean — SpringDoc already builds one; a second bean breaks
- * Swagger UI. Only customize via {@link OpenApiCustomizer}.
- */
+// We customize the existing OpenAPI bean instead of creating a new one — two beans break Swagger UI.
 @AutoConfiguration
 @ConditionalOnClass(OpenAPI.class)
 @EnableConfigurationProperties(OpenApiInfoProperties.class)

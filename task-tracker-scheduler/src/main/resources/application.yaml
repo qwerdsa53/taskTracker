@@ -8,9 +8,8 @@ spring:
   jpa:
     open-in-view: false
     hibernate:
-      ddl-auto: validate
+      ddl-auto: ${DDL_AUTO:create}
 
-# Swagger UI: /swagger-ui/index.html (or / with redirect-root-to-swagger). OpenAPI JSON: /v3/api-docs
 springdoc:
   api-docs:
     version: OPENAPI_3_0
@@ -21,12 +20,10 @@ springdoc:
 app:
   openapi:
     title: Task Tracker Scheduler
-    description: Scheduler REST API (jobs, health). Same port as server (default 8081).
+    description: Scheduler REST API (jobs, health).
     version: 0.0.1
-    # SpringDoc UI is at /swagger-ui.html; this maps / to that URL.
     redirect-root-to-swagger: true
 
-# Scheduler runs on its own port (8080 only if you do not run task-tracker-api on the same host).
 server:
   port: ${SCHEDULER_SERVER_PORT:8081}
 
@@ -34,7 +31,7 @@ scheduler:
   reminder:
     initial-delay-ms: 15000
     poll-interval-ms: 60000
-    # Optional: set a cron expression to override fixed-delay (Spring six-field cron).
+    # Optional cron expression (overrides fixed-delay when set)
     cron: ""
 
 management:
@@ -43,9 +40,9 @@ management:
       exposure:
         include: health,info
 
-# Temporal: see docker-compose.temporal.yml and scripts/temporal-up.sh. If false, jobs run via Spring SchedulingConfigurer only.
+# When false, jobs run via Spring scheduler instead of Temporal
 temporal:
-  enabled: true
+  enabled: ${TEMPORAL_ENABLED:true}
   target: ${TEMPORAL_TARGET:127.0.0.1:7233}
   namespace: default
   task-queue: task-tracker-reminders

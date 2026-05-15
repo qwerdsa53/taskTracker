@@ -107,7 +107,7 @@ public class AuthService {
 					tokenBlacklistStore.blacklist(parsed.jti(), ttl);
 				}
 			} catch (JwtException ignored) {
-				// ignore invalid access token on logout
+				// expired or invalid token on logout is fine, just skip it
 			}
 		}
 		if (refreshTokenOptional != null && !refreshTokenOptional.isBlank()) {
@@ -117,7 +117,6 @@ public class AuthService {
 					refreshTokenStore.remove(c.getId());
 				}
 			} catch (JwtException ignored) {
-				// ignore
 			}
 		}
 	}

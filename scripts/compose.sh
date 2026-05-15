@@ -3,6 +3,12 @@
 # Usage: source "$(dirname "${BASH_SOURCE[0]}")/compose.sh"
 
 compose_run() {
+	if ! docker buildx version >/dev/null 2>&1; then
+		echo "Install docker buildx: https://docs.docker.com/build/buildx/install/" >&2
+		return 1
+	fi
+	export DOCKER_BUILDKIT=1
+	export COMPOSE_DOCKER_CLI_BUILD=1
 	if docker compose version >/dev/null 2>&1; then
 		docker compose "$@"
 	elif command -v docker-compose >/dev/null 2>&1; then

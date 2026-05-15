@@ -18,10 +18,7 @@ import org.springframework.scheduling.support.PeriodicTrigger;
 
 import edu.mirea.qwerdsa53.taskTracker.scheduler.SchedulerJob;
 
-/**
- * Registers {@link SchedulerJob} beans that carry {@link SchedulerJobSpringSchedule} when Temporal is off.
- * Uses {@link SchedulingConfigurer} (the supported extension point for custom triggers), not a bean post-processor.
- */
+// Registers scheduled tasks for all SchedulerJob beans when Temporal is disabled.
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(prefix = "temporal", name = "enabled", havingValue = "false")
 public class SchedulerJobSpringSchedulingConfigurer implements SchedulingConfigurer {

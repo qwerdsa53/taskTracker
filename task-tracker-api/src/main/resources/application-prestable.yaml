@@ -1,4 +1,4 @@
-# Pre-stable / staging. Set DB_HOST, DB_NAME, DB_USER, DB_PASSWORD in the environment.
+# Staging profile. All DB vars are required, no defaults.
 spring:
   config:
     activate:

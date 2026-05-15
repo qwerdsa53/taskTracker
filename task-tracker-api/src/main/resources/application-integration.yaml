@@ -1,4 +1,4 @@
-# Integration / E2E tests: Postgres on DB_INTEGRATION_PORT (default 5433), see docker-compose postgres-integration.
+# Integration test profile. Uses a separate Postgres on DB_INTEGRATION_PORT (default 5433).
 app:
   mail:
     enabled: false

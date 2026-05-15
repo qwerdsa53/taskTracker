@@ -4,10 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 
 import org.springframework.stereotype.Component;
 
-/**
- * Paths that must accept anonymous access (including invalid Bearer without failing the request).
- * Must stay in sync with {@link edu.mirea.qwerdsa53.taskTracker.security.config.SecurityConfig}.
- */
+// Defines which paths are public. Must stay in sync with SecurityConfig.
 @Component
 public class PublicApiPathMatcher {
 

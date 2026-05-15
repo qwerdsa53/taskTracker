@@ -32,7 +32,6 @@ public class MailTemplateService {
 		return new RenderedEmail(subject, html);
 	}
 
-	/** Renders a Thymeleaf template from {@code mail/templates/{name}.html} for the given {@link MailTemplateName}. */
 	public String process(MailTemplateName template, Context context) {
 		return mailTemplateEngine.process(template.templateFileName(), context);
 	}
