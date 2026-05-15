@@ -6,9 +6,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.socket.messaging.SessionConnectEvent;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
-/**
- * Counts STOMP sessions (each WebSocket session id after CONNECT).
- */
 @Component
 public class StompPresenceEventListener {
 

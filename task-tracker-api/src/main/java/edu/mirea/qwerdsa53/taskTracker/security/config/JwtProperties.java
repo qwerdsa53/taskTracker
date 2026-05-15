@@ -7,7 +7,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "app.jwt")
 public class JwtProperties {
 
-	/** HMAC secret (min 32 bytes for HS256). Override via JWT_SECRET in production. */
+	// Minimum 32 characters for HS256. Set JWT_SECRET env var in production.
 	private String secret =
 			"dev-only-change-me-use-at-least-32-chars-secret-key-for-hs256";
 

@@ -7,6 +7,6 @@ public interface EmailVerificationTokenStore {
 
 	void store(String token, long userId, Duration ttl);
 
-	/** Validates token, removes it (and user mapping), returns user id if found. */
+	// Validates and removes the token. Returns the user id if the token was valid.
 	Optional<Long> consume(String token);
 }

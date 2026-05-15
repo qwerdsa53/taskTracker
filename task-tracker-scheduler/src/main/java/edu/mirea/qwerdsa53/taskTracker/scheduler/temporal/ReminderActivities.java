@@ -8,7 +8,6 @@ import io.temporal.activity.ActivityMethod;
 @ActivityInterface
 public interface ReminderActivities {
 
-	/** Temporal activity surface; domain work is implemented as {@link SchedulerJob} beans. */
 	@ActivityMethod
 	void pollDueReminders();
 }

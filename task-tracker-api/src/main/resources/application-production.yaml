@@ -1,4 +1,4 @@
-# Production. Database connection comes from the environment.
+# Production profile. All DB vars are required, no defaults.
 spring:
   config:
     activate:

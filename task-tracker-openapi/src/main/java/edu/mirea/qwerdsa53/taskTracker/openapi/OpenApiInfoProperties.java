@@ -13,9 +13,6 @@ public class OpenApiInfoProperties {
 
 	private String version = "0.0.1";
 
-	/**
-	 * If true, GET / redirects to Swagger UI (springdoc default path).
-	 */
 	private boolean redirectRootToSwagger = false;
 
 	public boolean isEnabled() {

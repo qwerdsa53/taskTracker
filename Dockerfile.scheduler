@@ -1,0 +1,20 @@
+FROM eclipse-temurin:21-jdk-alpine AS build
+WORKDIR /app
+
+COPY gradlew .
+RUN chmod +x gradlew
+COPY gradle gradle
+COPY build.gradle.kts .
+COPY settings.gradle.kts .
+COPY task-tracker-common task-tracker-common
+COPY task-tracker-openapi task-tracker-openapi
+COPY task-tracker-api task-tracker-api
+COPY task-tracker-scheduler task-tracker-scheduler
+
+RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
+    ./gradlew :task-tracker-scheduler:bootJar -x test --no-daemon
+
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+COPY --from=build /app/task-tracker-scheduler/build/libs/task-tracker-scheduler-*.jar app.jar
+ENTRYPOINT ["java", "-jar", "app.jar"]

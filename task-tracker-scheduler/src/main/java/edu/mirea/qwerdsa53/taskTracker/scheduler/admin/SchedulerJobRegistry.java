@@ -12,9 +12,7 @@ import org.springframework.stereotype.Component;
 import edu.mirea.qwerdsa53.taskTracker.scheduler.SchedulerJob;
 import edu.mirea.qwerdsa53.taskTracker.scheduler.spring.SchedulerJobSpringSchedule;
 
-/**
- * Maps {@link Class#getSimpleName()} of each {@link SchedulerJobSpringSchedule} implementation to its bean.
- */
+// Holds all scheduler jobs indexed by their simple class name.
 @Component
 public class SchedulerJobRegistry {
 

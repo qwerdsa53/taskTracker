@@ -1,4 +1,7 @@
 services:
+
+  # Infrastructure
+
   redis:
     image: redis:7-alpine
     container_name: tasktracker-redis
@@ -9,16 +12,16 @@ services:
     image: postgres:16-alpine
     container_name: tasktracker-postgres
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: tasktracker
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-tasktracker}
     ports:
       - "${DB_PORT:-5432}:5432"
     volumes:
       - tasktracker_pgdata:/var/lib/postgresql/data
       - ./fixtures:/fixtures:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d tasktracker"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-tasktracker}"]
       interval: 3s
       timeout: 3s
       retries: 10
@@ -27,19 +30,91 @@ services:
     image: postgres:16-alpine
     container_name: tasktracker-postgres-integration
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: tasktracker
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-tasktracker}
     ports:
       - "${DB_INTEGRATION_PORT:-5433}:5432"
     volumes:
       - tasktracker_pgdata_integration:/var/lib/postgresql/data
       - ./fixtures:/fixtures:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d tasktracker"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-tasktracker}"]
       interval: 3s
       timeout: 3s
       retries: 10
+
+  # Application
+  # Шаг 2: образ не содержит переменных окружения — всё передаётся при запуске.
+  # Шаг 3: IMAGE_TAG фиксирует конкретный образ из CI (commit SHA).
+  #         Если IMAGE_TAG не задан — собираем локально (тег local).
+
+  nginx:
+    image: nginx:alpine
+    container_name: tasktracker-nginx
+    ports:
+      - "${SERVER_PORT:-8080}:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+
+  api:
+    image: ghcr.io/qwerdsa53/task-tracker-api:${IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    env_file: .env
+    environment:
+      SPRING_PROFILES_ACTIVE: development
+      SERVER_PORT: 8080
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-tasktracker}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MAIL_HOST: ${MAIL_HOST:-smtp.yandex.ru}
+      MAIL_PORT: ${MAIL_PORT:-465}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      APP_MAIL_ENABLED: ${APP_MAIL_ENABLED:-false}
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-me-use-at-least-32-chars-secret-key-for-hs256}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-7d}
+      DDL_AUTO: ${DDL_AUTO:-update}
+    deploy:
+      replicas: ${API_REPLICAS:-1}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  scheduler:
+    image: ghcr.io/qwerdsa53/task-tracker-scheduler:${IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: Dockerfile.scheduler
+    container_name: tasktracker-scheduler
+    env_file: .env
+    environment:
+      SERVER_PORT: ${SCHEDULER_SERVER_PORT:-8081}
+      SCHEDULER_SERVER_PORT: ${SCHEDULER_SERVER_PORT:-8081}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-tasktracker}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DDL_AUTO: ${DDL_AUTO:-update}
+      TEMPORAL_ENABLED: ${TEMPORAL_ENABLED:-false}
+      TEMPORAL_TARGET: ${TEMPORAL_TARGET:-127.0.0.1:7233}
+    ports:
+      - "${SCHEDULER_SERVER_PORT:-8081}:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   tasktracker_pgdata:

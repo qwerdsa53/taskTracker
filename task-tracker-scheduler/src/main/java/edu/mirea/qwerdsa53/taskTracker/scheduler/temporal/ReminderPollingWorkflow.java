@@ -6,7 +6,7 @@ import io.temporal.workflow.WorkflowMethod;
 @WorkflowInterface
 public interface ReminderPollingWorkflow {
 
-	/** Long-running loop: run poll activity, then sleep between ticks. */
+	// Runs forever: polls reminders, then sleeps until the next tick.
 	@WorkflowMethod
 	void runForever();
 }

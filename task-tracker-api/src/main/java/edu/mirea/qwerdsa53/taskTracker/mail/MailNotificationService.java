@@ -34,10 +34,7 @@ public class MailNotificationService {
 		this.mailTaskExecutor = mailTaskExecutor;
 	}
 
-	/**
-	 * Schedules SMTP send after the current transaction commits (if any), so the HTTP handler returns
-	 * without waiting for the mail server.
-	 */
+	// Sends the email after the current transaction commits to avoid blocking the HTTP handler.
 	public void sendEmailVerification(String toEmail, String verificationUrl) {
 		if (!mailProperties.isEnabled()) {
 			log.info(
