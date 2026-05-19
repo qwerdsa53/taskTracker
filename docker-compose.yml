@@ -45,9 +45,6 @@ services:
       retries: 10
 
   # Application
-  # Шаг 2: образ не содержит переменных окружения — всё передаётся при запуске.
-  # Шаг 3: IMAGE_TAG фиксирует конкретный образ из CI (commit SHA).
-  #         Если IMAGE_TAG не задан — собираем локально (тег local).
 
   nginx:
     image: nginx:alpine
@@ -56,6 +53,7 @@ services:
       - "${SERVER_PORT:-8080}:80"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./frontend:/usr/share/nginx/html:ro
     depends_on:
       - api
 

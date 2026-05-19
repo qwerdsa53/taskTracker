@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Task Tracker</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f2f5; color: #111827; }
+
+/* ── Auth ─────────────────────────────────────── */
+.auth-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+.auth-card { background: #fff; border-radius: 14px; padding: 40px; width: 420px; box-shadow: 0 4px 32px rgba(0,0,0,.12); }
+.auth-logo { text-align: center; margin-bottom: 28px; }
+.auth-logo h1 { font-size: 22px; font-weight: 800; color: #1e1b4b; }
+.auth-logo p { font-size: 13px; color: #6b7280; margin-top: 4px; }
+.tabs { display: flex; border-bottom: 2px solid #e5e7eb; margin-bottom: 24px; }
+.tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; font-weight: 600; font-size: 14px; color: #6b7280; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: color .2s; }
+.tab.active { color: #4f46e5; border-bottom-color: #4f46e5; }
+
+/* ── Forms ────────────────────────────────────── */
+.fg { margin-bottom: 14px; }
+label { display: block; font-size: 13px; font-weight: 500; color: #374151; margin-bottom: 5px; }
+input, select, textarea { width: 100%; padding: 9px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; outline: none; transition: border-color .2s; background: #fff; }
+input:focus, select:focus, textarea:focus { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,.1); }
+input[type=color] { height: 40px; padding: 4px 6px; cursor: pointer; }
+input[type=time] { cursor: pointer; }
+textarea { resize: vertical; }
+.err { color: #ef4444; font-size: 12px; margin-top: 6px; display: none; }
+.err.show { display: block; }
+.ok-msg { color: #10b981; font-size: 12px; margin-top: 6px; display: none; }
+.ok-msg.show { display: block; }
+
+/* ── Buttons ──────────────────────────────────── */
+.btn { display: inline-flex; align-items: center; gap: 5px; padding: 9px 18px; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; transition: all .15s; white-space: nowrap; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-primary { background: #4f46e5; color: #fff; }
+.btn-primary:hover:not(:disabled) { background: #4338ca; }
+.btn-full { width: 100%; justify-content: center; }
+.btn-sm { padding: 5px 12px; font-size: 12px; border-radius: 6px; }
+.btn-outline { background: #fff; border: 1px solid #d1d5db; color: #374151; }
+.btn-outline:hover { background: #f9fafb; }
+.btn-success { background: #10b981; color: #fff; }
+.btn-success:hover { background: #059669; }
+.btn-danger { background: #ef4444; color: #fff; }
+.btn-danger:hover { background: #dc2626; }
+.btn-ghost { background: transparent; color: #6b7280; border: 1px solid transparent; }
+.btn-ghost:hover { background: #f3f4f6; }
+
+/* ── App layout ───────────────────────────────── */
+#app { display: flex; flex-direction: column; height: 100vh; }
+.topbar { background: #1e1b4b; color: #fff; height: 54px; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.topbar-brand { font-size: 17px; font-weight: 800; letter-spacing: -.3px; }
+.topbar-right { display: flex; align-items: center; gap: 14px; font-size: 13px; }
+.online-pill { background: rgba(255,255,255,.15); padding: 3px 10px; border-radius: 20px; font-size: 12px; }
+.topbar-user { color: rgba(255,255,255,.8); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.body { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Sidebar ──────────────────────────────────── */
+.sidebar { width: 260px; background: #fff; border-right: 1px solid #e5e7eb; display: flex; flex-direction: column; flex-shrink: 0; }
+.sidebar-head { padding: 14px 16px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; justify-content: space-between; }
+.sidebar-head h3 { font-size: 14px; font-weight: 700; color: #111827; }
+.habits-list { flex: 1; overflow-y: auto; padding: 6px; }
+.h-item { display: flex; align-items: center; gap: 9px; padding: 10px 10px; border-radius: 8px; cursor: pointer; margin-bottom: 2px; transition: background .15s; }
+.h-item:hover { background: #f3f4f6; }
+.h-item.active { background: #ede9fe; }
+.h-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.h-name { font-size: 13px; font-weight: 500; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.h-archived { font-size: 11px; color: #9ca3af; flex-shrink: 0; }
+.sidebar-empty { padding: 16px; font-size: 13px; color: #9ca3af; text-align: center; }
+
+/* ── Content ──────────────────────────────────── */
+.content { flex: 1; overflow-y: auto; padding: 24px; }
+.empty-center { display: flex; align-items: center; justify-content: center; height: 100%; color: #9ca3af; font-size: 14px; }
+
+/* ── Habit detail ─────────────────────────────── */
+.detail-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; gap: 12px; }
+.detail-title { font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 10px; }
+.detail-sub { font-size: 13px; color: #6b7280; margin-top: 5px; }
+.detail-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+.tag-purple { background: #ede9fe; color: #6d28d9; }
+.tag-red { background: #fee2e2; color: #dc2626; }
+
+/* ── Section card ─────────────────────────────── */
+.card { background: #fff; border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+.card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.card-title { font-size: 15px; font-weight: 700; }
+.row { display: flex; align-items: center; padding: 9px 0; border-bottom: 1px solid #f3f4f6; gap: 8px; }
+.row:last-child { border-bottom: none; padding-bottom: 0; }
+.row-main { flex: 1; min-width: 0; }
+.row-title { font-size: 13px; font-weight: 500; }
+.row-sub { font-size: 12px; color: #9ca3af; margin-top: 2px; }
+.no-items { font-size: 13px; color: #9ca3af; padding: 8px 0; }
+
+/* ── Modal ────────────────────────────────────── */
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 200; }
+.modal { background: #fff; border-radius: 14px; padding: 26px; width: 460px; max-width: calc(100vw - 32px); max-height: 90vh; overflow-y: auto; box-shadow: 0 8px 40px rgba(0,0,0,.2); }
+.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.modal-title { font-size: 17px; font-weight: 800; }
+.modal-close { background: none; border: none; cursor: pointer; font-size: 18px; color: #9ca3af; line-height: 1; padding: 2px 6px; border-radius: 4px; }
+.modal-close:hover { color: #374151; background: #f3f4f6; }
+.modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+
+/* ── Weekdays ─────────────────────────────────── */
+.wd-grid { display: flex; gap: 5px; flex-wrap: wrap; }
+.wd-btn { padding: 5px 9px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid #d1d5db; background: #fff; color: #374151; transition: all .15s; }
+.wd-btn.on { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+
+/* ── Toggle ───────────────────────────────────── */
+.toggle { position: relative; display: inline-block; width: 38px; height: 21px; flex-shrink: 0; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; inset: 0; background: #d1d5db; border-radius: 21px; cursor: pointer; transition: .25s; }
+.slider:before { content: ''; position: absolute; width: 15px; height: 15px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .25s; }
+input:checked + .slider { background: #4f46e5; }
+input:checked + .slider:before { transform: translateX(17px); }
+
+.hidden { display: none !important; }
+.flex { display: flex; }
+.gap-2 { gap: 8px; }
+</style>
+</head>
+<body>
+
+<!-- ════════════════ AUTH ════════════════ -->
+<div id="auth-screen" class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <h1>Task Tracker</h1>
+      <p>Трекер привычек</p>
+    </div>
+    <div class="tabs">
+      <div class="tab active" id="tab-login" onclick="switchTab('login')">Войти</div>
+      <div class="tab" id="tab-register" onclick="switchTab('register')">Регистрация</div>
+    </div>
+
+    <!-- Login -->
+    <form id="form-login" onsubmit="handleLogin(event)">
+      <div class="fg"><label>Email</label><input type="email" id="l-email" required autocomplete="email"></div>
+      <div class="fg"><label>Пароль</label><input type="password" id="l-pass" required autocomplete="current-password"></div>
+      <div class="err" id="l-err"></div>
+      <div class="ok-msg" id="l-ok"></div>
+      <div class="fg" style="margin-top:18px"><button type="submit" class="btn btn-primary btn-full">Войти</button></div>
+    </form>
+
+    <!-- Register -->
+    <form id="form-register" class="hidden" onsubmit="handleRegister(event)">
+      <div class="fg"><label>Имя пользователя</label><input type="text" id="r-user" required minlength="1" maxlength="128"></div>
+      <div class="fg"><label>Email</label><input type="email" id="r-email" required autocomplete="email"></div>
+      <div class="fg"><label>Пароль <span style="color:#9ca3af">(8–128 символов)</span></label><input type="password" id="r-pass" required minlength="8" maxlength="128" autocomplete="new-password"></div>
+      <div class="fg">
+        <label>Часовой пояс</label>
+        <select id="r-tz">
+          <option value="Europe/Moscow">Москва (UTC+3)</option>
+          <option value="Europe/Kaliningrad">Калининград (UTC+2)</option>
+          <option value="Asia/Yekaterinburg">Екатеринбург (UTC+5)</option>
+          <option value="Asia/Novosibirsk">Новосибирск (UTC+7)</option>
+          <option value="Asia/Vladivostok">Владивосток (UTC+10)</option>
+          <option value="Europe/London">Лондон (UTC+0)</option>
+          <option value="America/New_York">Нью-Йорк (UTC-5)</option>
+          <option value="UTC">UTC</option>
+        </select>
+      </div>
+      <div class="err" id="r-err"></div>
+      <div class="fg" style="margin-top:18px"><button type="submit" class="btn btn-primary btn-full">Зарегистрироваться</button></div>
+    </form>
+  </div>
+</div>
+
+<!-- ════════════════ APP ════════════════ -->
+<div id="app" class="hidden">
+  <div class="topbar">
+    <div class="topbar-brand">Task Tracker</div>
+    <div class="topbar-right">
+      <span class="online-pill">Онлайн: <span id="online-cnt">—</span></span>
+      <span class="topbar-user" id="hdr-user"></span>
+      <button class="btn btn-sm btn-outline" onclick="doLogout()" style="color:#fff;border-color:rgba(255,255,255,.35)">Выйти</button>
+    </div>
+  </div>
+  <div class="body">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <h3>Привычки</h3>
+        <button class="btn btn-sm btn-primary" onclick="openHabitModal(null)">+ Новая</button>
+      </div>
+      <div class="habits-list" id="habits-list"></div>
+    </aside>
+    <div class="content" id="content">
+      <div class="empty-center">Выберите привычку или создайте новую</div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ MODAL ════════════════ -->
+<div class="overlay hidden" id="overlay" onclick="overlayClick(event)">
+  <div class="modal" id="modal"></div>
+</div>
+
+<script>
+// ── Constants ──────────────────────────────────────────────
+const API = '/api/v1';
+const DAYS = ['MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY','SUNDAY'];
+const DAY_RU = { MONDAY:'Пн', TUESDAY:'Вт', WEDNESDAY:'Ср', THURSDAY:'Чт', FRIDAY:'Пт', SATURDAY:'Сб', SUNDAY:'Вс' };
+const FREQ_RU = { EVERY_DAY:'Каждый день', TIMES_PER_WEEK:'Раз в неделю', ON_SELECTED_WEEKDAYS:'По дням недели' };
+
+// ── State ──────────────────────────────────────────────────
+let AT = localStorage.getItem('at');   // access token
+let RT = localStorage.getItem('rt');   // refresh token
+let UID = null;
+let UEMAIL = '';
+let habits = [];
+let selId = null;
+let completions = [];
+let reminders = [];
+let onlineTid = null;
+
+// ── JWT ────────────────────────────────────────────────────
+function jwtPayload(token) {
+  try { return JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))); }
+  catch { return null; }
+}
+function loadIdentity(token) {
+  const p = jwtPayload(token);
+  if (p) { UID = parseInt(p.sub); UEMAIL = p.email || ''; }
+}
+
+// ── HTTP ───────────────────────────────────────────────────
+async function req(method, path, body, retry = true) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (AT) opts.headers['Authorization'] = `Bearer ${AT}`;
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  let res;
+  try { res = await fetch(API + path, opts); }
+  catch { return null; }
+  if (res.status === 401 && retry && RT) {
+    const ok = await refreshTokens();
+    if (ok) return req(method, path, body, false);
+    doLogout(); return null;
+  }
+  return res;
+}
+
+async function refreshTokens() {
+  try {
+    const res = await fetch(`${API}/auth/refresh`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: RT }),
+    });
+    if (!res.ok) return false;
+    const d = await res.json();
+    AT = d.accessToken; RT = d.refreshToken;
+    localStorage.setItem('at', AT); localStorage.setItem('rt', RT);
+    loadIdentity(AT); return true;
+  } catch { return false; }
+}
+
+async function json(res) { try { return await res.json(); } catch { return {}; } }
+
+// ── Auth UI ────────────────────────────────────────────────
+function switchTab(t) {
+  document.getElementById('form-login').classList.toggle('hidden', t !== 'login');
+  document.getElementById('form-register').classList.toggle('hidden', t !== 'register');
+  document.getElementById('tab-login').classList.toggle('active', t === 'login');
+  document.getElementById('tab-register').classList.toggle('active', t === 'register');
+}
+
+async function handleLogin(e) {
+  e.preventDefault();
+  const errEl = document.getElementById('l-err');
+  errEl.classList.remove('show');
+  const res = await fetch(`${API}/auth/login`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: document.getElementById('l-email').value, password: document.getElementById('l-pass').value }),
+  }).catch(() => null);
+  if (!res || !res.ok) {
+    const d = await json(res);
+    errEl.textContent = d.message || 'Неверный email или пароль';
+    errEl.classList.add('show'); return;
+  }
+  const d = await res.json();
+  AT = d.accessToken; RT = d.refreshToken;
+  localStorage.setItem('at', AT); localStorage.setItem('rt', RT);
+  loadIdentity(AT);
+  startApp();
+}
+
+async function handleRegister(e) {
+  e.preventDefault();
+  const errEl = document.getElementById('r-err');
+  errEl.classList.remove('show');
+  const res = await fetch(`${API}/users`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      username: document.getElementById('r-user').value,
+      email: document.getElementById('r-email').value,
+      password: document.getElementById('r-pass').value,
+      timezone: document.getElementById('r-tz').value,
+    }),
+  }).catch(() => null);
+  if (!res || !res.ok) {
+    const d = await json(res);
+    errEl.textContent = d.message || 'Ошибка регистрации';
+    errEl.classList.add('show'); return;
+  }
+  switchTab('login');
+  const okEl = document.getElementById('l-ok');
+  okEl.textContent = 'Аккаунт создан! Войдите.';
+  okEl.classList.add('show');
+  document.getElementById('l-email').value = document.getElementById('r-email').value;
+}
+
+async function doLogout() {
+  if (RT) await req('POST', '/auth/logout', { refreshToken: RT }).catch(() => {});
+  AT = RT = null; UID = null;
+  localStorage.removeItem('at'); localStorage.removeItem('rt');
+  clearInterval(onlineTid);
+  habits = []; selId = null;
+  document.getElementById('app').classList.add('hidden');
+  document.getElementById('auth-screen').classList.remove('hidden');
+}
+
+// ── App start ──────────────────────────────────────────────
+async function startApp() {
+  document.getElementById('auth-screen').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  document.getElementById('hdr-user').textContent = UEMAIL;
+  await loadHabits();
+  pollOnline();
+  onlineTid = setInterval(pollOnline, 30000);
+}
+
+// ── Habits ─────────────────────────────────────────────────
+async function loadHabits() {
+  const res = await req('GET', `/users/${UID}/habits`);
+  if (res && res.ok) { habits = await res.json(); } else { habits = []; }
+  renderSidebar();
+}
+
+function renderSidebar() {
+  const el = document.getElementById('habits-list');
+  if (!habits.length) { el.innerHTML = '<div class="sidebar-empty">Нет привычек</div>'; return; }
+  el.innerHTML = habits.map(h => `
+    <div class="h-item${h.id === selId ? ' active' : ''}" onclick="selectHabit(${h.id})">
+      <div class="h-dot" style="background:${esc(h.color)||'#4f46e5'}"></div>
+      <div class="h-name">${esc(h.title)}</div>
+      ${h.archived ? '<span class="h-archived">архив</span>' : ''}
+    </div>`).join('');
+}
+
+async function selectHabit(id) {
+  selId = id;
+  renderSidebar();
+  const [cr, rr] = await Promise.all([
+    req('GET', `/users/${UID}/habits/${id}/completions`),
+    req('GET', `/users/${UID}/habits/${id}/reminders`),
+  ]);
+  completions = cr && cr.ok ? await cr.json() : [];
+  reminders   = rr && rr.ok ? await rr.json() : [];
+  renderDetail();
+}
+
+function renderDetail() {
+  const h = habits.find(x => x.id === selId);
+  if (!h) return;
+  const freq = fmtFreq(h.schedule);
+  document.getElementById('content').innerHTML = `
+    <div class="detail-header">
+      <div>
+        <div class="detail-title">
+          <div class="h-dot" style="width:14px;height:14px;background:${esc(h.color)||'#4f46e5'}"></div>
+          ${esc(h.title)}
+          ${h.archived ? '<span class="tag tag-red">архив</span>' : ''}
+        </div>
+        ${h.description ? `<div class="detail-sub">${esc(h.description)}</div>` : ''}
+        <div style="margin-top:8px"><span class="tag tag-purple">${freq}</span></div>
+      </div>
+      <div class="detail-actions">
+        <button class="btn btn-sm btn-outline" onclick="openHabitModal(${h.id})">✎ Изменить</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteHabit(${h.id})">✕ Удалить</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-title">Выполнения</div>
+        <button class="btn btn-sm btn-success" onclick="openCompModal()">+ Добавить</button>
+      </div>
+      <div id="comp-list">${renderComps()}</div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-title">Напоминания</div>
+        <button class="btn btn-sm btn-primary" onclick="openRemModal(null)">+ Добавить</button>
+      </div>
+      <div id="rem-list">${renderRems()}</div>
+    </div>`;
+}
+
+function renderComps() {
+  if (!completions.length) return '<div class="no-items">Нет записей</div>';
+  return [...completions].sort((a,b) => b.completedOn.localeCompare(a.completedOn)).map(c => `
+    <div class="row">
+      <div class="row-main">
+        <div class="row-title">${c.completedOn}</div>
+        ${c.note ? `<div class="row-sub">${esc(c.note)}</div>` : ''}
+      </div>
+      <span class="tag tag-purple">×${c.quantity}</span>
+      <button class="btn btn-sm btn-ghost" onclick="delComp(${c.id})" title="Удалить">✕</button>
+    </div>`).join('');
+}
+
+function renderRems() {
+  if (!reminders.length) return '<div class="no-items">Нет напоминаний</div>';
+  return reminders.map(r => `
+    <div class="row">
+      <div class="row-main">
+        <div class="row-title">${r.localTime}</div>
+        <div class="row-sub">${r.weekdays&&r.weekdays.length ? r.weekdays.map(d=>DAY_RU[d]||d).join(', ') : 'Ежедневно'}</div>
+      </div>
+      <label class="toggle" title="${r.enabled?'Выключить':'Включить'}">
+        <input type="checkbox" ${r.enabled?'checked':''} onchange="toggleRem(${r.id},this.checked)">
+        <span class="slider"></span>
+      </label>
+      <button class="btn btn-sm btn-ghost" onclick="openRemModal(${r.id})" title="Изменить">✎</button>
+      <button class="btn btn-sm btn-ghost" onclick="delRem(${r.id})" title="Удалить">✕</button>
+    </div>`).join('');
+}
+
+// ── Habit CRUD ─────────────────────────────────────────────
+function openHabitModal(id) {
+  const h = id ? habits.find(x => x.id === id) : null;
+  const s = h?.schedule || { type:'EVERY_DAY', targetPerWeek: null, activeWeekdays: [] };
+  document.getElementById('modal').innerHTML = `
+    <div class="modal-head">
+      <div class="modal-title">${h ? 'Изменить привычку' : 'Новая привычка'}</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="fg"><label>Название *</label>
+      <input id="ht" value="${esc(h?.title||'')}" maxlength="255"></div>
+    <div class="fg"><label>Описание</label>
+      <textarea id="hd" rows="2" maxlength="2000">${esc(h?.description||'')}</textarea></div>
+    <div class="fg"><label>Цвет</label>
+      <input type="color" id="hc" value="${h?.color||'#4f46e5'}"></div>
+    <div class="fg"><label>Частота</label>
+      <select id="hft" onchange="freqChange()">
+        <option value="EVERY_DAY"${s.type==='EVERY_DAY'?' selected':''}>Каждый день</option>
+        <option value="TIMES_PER_WEEK"${s.type==='TIMES_PER_WEEK'?' selected':''}>N раз в неделю</option>
+        <option value="ON_SELECTED_WEEKDAYS"${s.type==='ON_SELECTED_WEEKDAYS'?' selected':''}>По дням недели</option>
+      </select></div>
+    <div id="ft-times" class="fg${s.type!=='TIMES_PER_WEEK'?' hidden':''}">
+      <label>Раз в неделю</label>
+      <input type="number" id="htw" min="1" max="7" value="${s.targetPerWeek||3}"></div>
+    <div id="ft-days" class="fg${s.type!=='ON_SELECTED_WEEKDAYS'?' hidden':''}">
+      <label>Дни недели</label>
+      <div class="wd-grid" id="h-wds">
+        ${DAYS.map(d=>`<button type="button" class="wd-btn${s.activeWeekdays?.includes(d)?' on':''}" data-d="${d}" onclick="this.classList.toggle('on')">${DAY_RU[d]}</button>`).join('')}
+      </div></div>
+    <div class="fg" style="display:flex;align-items:center;gap:10px">
+      <label style="margin:0">В архиве</label>
+      <label class="toggle"><input type="checkbox" id="ha" ${h?.archived?'checked':''}><span class="slider"></span></label>
+    </div>
+    <div class="err" id="h-err"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Отмена</button>
+      <button class="btn btn-primary" onclick="saveHabit(${id||'null'})">${h?'Сохранить':'Создать'}</button>
+    </div>`;
+  showModal();
+}
+
+function freqChange() {
+  const t = document.getElementById('hft').value;
+  document.getElementById('ft-times').classList.toggle('hidden', t !== 'TIMES_PER_WEEK');
+  document.getElementById('ft-days').classList.toggle('hidden',  t !== 'ON_SELECTED_WEEKDAYS');
+}
+
+async function saveHabit(id) {
+  const title = document.getElementById('ht').value.trim();
+  const errEl = document.getElementById('h-err');
+  if (!title) { errEl.textContent = 'Введите название'; errEl.classList.add('show'); return; }
+  errEl.classList.remove('show');
+  const ft = document.getElementById('hft').value;
+  const body = {
+    title,
+    description: document.getElementById('hd').value.trim() || null,
+    color: document.getElementById('hc').value,
+    archived: document.getElementById('ha').checked,
+    schedule: {
+      type: ft,
+      targetPerWeek: ft === 'TIMES_PER_WEEK' ? (parseInt(document.getElementById('htw').value)||3) : null,
+      activeWeekdays: ft === 'ON_SELECTED_WEEKDAYS' ? [...document.querySelectorAll('#h-wds .wd-btn.on')].map(b=>b.dataset.d) : [],
+    },
+  };
+  const res = await req(id ? 'PUT' : 'POST', id ? `/users/${UID}/habits/${id}` : `/users/${UID}/habits`, body);
+  if (!res || !res.ok) { const d = await json(res); errEl.textContent = d.message||'Ошибка'; errEl.classList.add('show'); return; }
+  const saved = await res.json();
+  closeModal();
+  await loadHabits();
+  selId = saved.id;
+  renderSidebar();
+  await selectHabit(saved.id);
+}
+
+async function deleteHabit(id) {
+  if (!confirm('Удалить привычку и все её данные?')) return;
+  const res = await req('DELETE', `/users/${UID}/habits/${id}`);
+  if (res && res.ok) {
+    selId = null;
+    await loadHabits();
+    document.getElementById('content').innerHTML = '<div class="empty-center">Выберите привычку или создайте новую</div>';
+  }
+}
+
+// ── Completions ────────────────────────────────────────────
+function openCompModal() {
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('modal').innerHTML = `
+    <div class="modal-head">
+      <div class="modal-title">Добавить выполнение</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="fg"><label>Дата *</label><input type="date" id="cd" value="${today}"></div>
+    <div class="fg"><label>Количество</label><input type="number" id="cq" min="1" value="1"></div>
+    <div class="fg"><label>Заметка</label><input type="text" id="cn" placeholder="Необязательно" maxlength="500"></div>
+    <div class="err" id="c-err"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Отмена</button>
+      <button class="btn btn-success" onclick="saveComp()">Сохранить</button>
+    </div>`;
+  showModal();
+}
+
+async function saveComp() {
+  const errEl = document.getElementById('c-err');
+  const body = {
+    completedOn: document.getElementById('cd').value,
+    quantity: parseInt(document.getElementById('cq').value)||1,
+    note: document.getElementById('cn').value.trim() || null,
+  };
+  const res = await req('POST', `/users/${UID}/habits/${selId}/completions`, body);
+  if (!res || !res.ok) { const d = await json(res); errEl.textContent = d.message||'Ошибка'; errEl.classList.add('show'); return; }
+  const c = await res.json();
+  completions.push(c);
+  closeModal();
+  document.getElementById('comp-list').innerHTML = renderComps();
+}
+
+async function delComp(id) {
+  if (!confirm('Удалить запись?')) return;
+  const res = await req('DELETE', `/users/${UID}/habits/${selId}/completions/${id}`);
+  if (res && res.ok) {
+    completions = completions.filter(c => c.id !== id);
+    document.getElementById('comp-list').innerHTML = renderComps();
+  }
+}
+
+// ── Reminders ──────────────────────────────────────────────
+function openRemModal(id) {
+  const r = id ? reminders.find(x => x.id === id) : null;
+  document.getElementById('modal').innerHTML = `
+    <div class="modal-head">
+      <div class="modal-title">${r ? 'Изменить напоминание' : 'Новое напоминание'}</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="fg"><label>Время *</label><input type="time" id="rt" value="${r?.localTime||'09:00'}"></div>
+    <div class="fg"><label>Дни недели <span style="color:#9ca3af">(пусто = ежедневно)</span></label>
+      <div class="wd-grid" id="r-wds">
+        ${DAYS.map(d=>`<button type="button" class="wd-btn${r?.weekdays?.includes(d)?' on':''}" data-d="${d}" onclick="this.classList.toggle('on')">${DAY_RU[d]}</button>`).join('')}
+      </div></div>
+    <div class="fg" style="display:flex;align-items:center;gap:10px">
+      <label style="margin:0">Включено</label>
+      <label class="toggle"><input type="checkbox" id="re" ${!r||r.enabled?'checked':''}><span class="slider"></span></label>
+    </div>
+    <div class="err" id="r-err"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Отмена</button>
+      <button class="btn btn-primary" onclick="saveRem(${id||'null'})">${r?'Сохранить':'Создать'}</button>
+    </div>`;
+  showModal();
+}
+
+async function saveRem(id) {
+  const errEl = document.getElementById('r-err');
+  const body = {
+    localTime: document.getElementById('rt').value,
+    weekdays: [...document.querySelectorAll('#r-wds .wd-btn.on')].map(b=>b.dataset.d),
+    enabled: document.getElementById('re').checked,
+  };
+  const res = await req(id?'PUT':'POST',
+    id ? `/users/${UID}/habits/${selId}/reminders/${id}` : `/users/${UID}/habits/${selId}/reminders`, body);
+  if (!res || !res.ok) { const d = await json(res); errEl.textContent = d.message||'Ошибка'; errEl.classList.add('show'); return; }
+  const saved = await res.json();
+  if (id) { const i = reminders.findIndex(r=>r.id===id); if (i>=0) reminders[i] = saved; }
+  else reminders.push(saved);
+  closeModal();
+  document.getElementById('rem-list').innerHTML = renderRems();
+}
+
+async function toggleRem(id, enabled) {
+  const r = reminders.find(x => x.id === id);
+  if (!r) return;
+  const res = await req('PUT', `/users/${UID}/habits/${selId}/reminders/${id}`,
+    { localTime: r.localTime, weekdays: r.weekdays, enabled });
+  if (res && res.ok) { r.enabled = enabled; document.getElementById('rem-list').innerHTML = renderRems(); }
+}
+
+async function delRem(id) {
+  if (!confirm('Удалить напоминание?')) return;
+  const res = await req('DELETE', `/users/${UID}/habits/${selId}/reminders/${id}`);
+  if (res && res.ok) {
+    reminders = reminders.filter(r => r.id !== id);
+    document.getElementById('rem-list').innerHTML = renderRems();
+  }
+}
+
+// ── Online count ───────────────────────────────────────────
+async function pollOnline() {
+  const res = await req('GET', '/presence/online-count');
+  if (res && res.ok) {
+    const d = await res.json();
+    document.getElementById('online-cnt').textContent = d.count ?? d ?? '—';
+  }
+}
+
+// ── Modal ──────────────────────────────────────────────────
+function showModal() { document.getElementById('overlay').classList.remove('hidden'); }
+function closeModal() { document.getElementById('overlay').classList.add('hidden'); }
+function overlayClick(e) { if (e.target === document.getElementById('overlay')) closeModal(); }
+
+// ── Helpers ────────────────────────────────────────────────
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtFreq(s) {
+  if (!s) return '';
+  if (s.type === 'EVERY_DAY') return 'Каждый день';
+  if (s.type === 'TIMES_PER_WEEK') return `${s.targetPerWeek||'?'} раз в неделю`;
+  if (s.type === 'ON_SELECTED_WEEKDAYS') return s.activeWeekdays?.map(d=>DAY_RU[d]||d).join(', ') || 'По дням';
+  return s.type;
+}
+
+// ── Boot ───────────────────────────────────────────────────
+if (AT) { loadIdentity(AT); if (UID) startApp(); }
+</script>
+</body>
+</html>
