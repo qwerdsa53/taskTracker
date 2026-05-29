@@ -1,15 +1,23 @@
 services:
 
-  # Infrastructure
+  # ---------- Infrastructure ----------
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.4-alpine
     container_name: tasktracker-redis
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
     ports:
       - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    stop_grace_period: 15s
+    restart: unless-stopped
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16.4-alpine
     container_name: tasktracker-postgres
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
@@ -25,9 +33,11 @@ services:
       interval: 3s
       timeout: 3s
       retries: 10
+    stop_grace_period: 30s
+    restart: unless-stopped
 
   postgres-integration:
-    image: postgres:16-alpine
+    image: postgres:16.4-alpine
     container_name: tasktracker-postgres-integration
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
@@ -43,9 +53,11 @@ services:
       interval: 3s
       timeout: 3s
       retries: 10
+    stop_grace_period: 30s
+    profiles: ["integration"]
 
   nginx:
-    image: nginx:alpine
+    image: nginx:1.27-alpine
     container_name: tasktracker-nginx
     ports:
       - "${SERVER_PORT:-8080}:80"
@@ -54,6 +66,15 @@ services:
       - ./frontend:/usr/share/nginx/html:ro
     depends_on:
       - api
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    stop_grace_period: 10s
+    restart: unless-stopped
+
+  # ---------- Application ----------
 
   api:
     image: ghcr.io/qwerdsa53/task-tracker-api:${IMAGE_TAG:-local}
@@ -80,13 +101,23 @@ services:
       JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
       JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-7d}
       DDL_AUTO: ${DDL_AUTO:-update}
+      SHUTDOWN_TIMEOUT: 25s
     deploy:
       replicas: ${API_REPLICAS:-1}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health/readiness"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+    # Must exceed SHUTDOWN_TIMEOUT so Spring can drain before SIGKILL.
+    stop_grace_period: 30s
+    restart: unless-stopped
 
   scheduler:
     image: ghcr.io/qwerdsa53/task-tracker-scheduler:${IMAGE_TAG:-local}
@@ -106,11 +137,20 @@ services:
       DDL_AUTO: ${DDL_AUTO:-update}
       TEMPORAL_ENABLED: ${TEMPORAL_ENABLED:-false}
       TEMPORAL_TARGET: ${TEMPORAL_TARGET:-127.0.0.1:7233}
+      SHUTDOWN_TIMEOUT: 25s
     ports:
       - "${SCHEDULER_SERVER_PORT:-8081}:8081"
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/actuator/health/readiness"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+    stop_grace_period: 30s
+    restart: unless-stopped
 
 volumes:
   tasktracker_pgdata:

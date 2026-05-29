@@ -3,8 +3,14 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      promote_sha:
+        description: 'Git SHA already deployed to testing — promote that exact image to prod'
+        required: true
 
 env:
   IMAGE_API: ghcr.io/${{ github.repository_owner }}/task-tracker-api
@@ -44,16 +50,42 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Шаг 1: образ тегируется commit SHA (уникальный идентификатор сборки)
+      # Авто-теги по типу события:
+      #   push main      → :<sha>, :main, :latest
+      #   push tag v1.2  → :<sha>, :v1.2, :1.2 (semver), :latest
+      #   PR             → не пушится
+      - name: Compute image tags (API)
+        id: meta_api
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_API }}
+          tags: |
+            type=sha,format=long
+            type=ref,event=branch
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Compute image tags (Scheduler)
+        id: meta_scheduler
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_SCHEDULER }}
+          tags: |
+            type=sha,format=long
+            type=ref,event=branch
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
       - name: Build and push API
         uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.api
           push: ${{ github.event_name == 'push' }}
-          tags: |
-            ${{ env.IMAGE_API }}:${{ github.sha }}
-            ${{ env.IMAGE_API }}:latest
+          tags: ${{ steps.meta_api.outputs.tags }}
+          labels: ${{ steps.meta_api.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -63,9 +95,8 @@ jobs:
           context: .
           file: Dockerfile.scheduler
           push: ${{ github.event_name == 'push' }}
-          tags: |
-            ${{ env.IMAGE_SCHEDULER }}:${{ github.sha }}
-            ${{ env.IMAGE_SCHEDULER }}:latest
+          tags: ${{ steps.meta_scheduler.outputs.tags }}
+          labels: ${{ steps.meta_scheduler.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -80,3 +111,140 @@ jobs:
           echo "| scheduler | \`${{ env.IMAGE_SCHEDULER }}:${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| run | \`${{ github.run_number }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| branch | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
+
+  # 12-factor admin process: migrations run as a one-off container BEFORE deploy.
+  # Pipeline aborts (set -e) if migrate exits non-zero — no broken deploys.
+  deploy-testing:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: testing
+    steps:
+      - name: SSH deploy (migrate → stack deploy → smoke check)
+        uses: appleboy/ssh-action@v1
+        env:
+          IMAGE_TAG: sha-${{ github.sha }}
+        with:
+          host: ${{ secrets.TESTING_HOST }}
+          username: ${{ secrets.TESTING_SSH_USER }}
+          key: ${{ secrets.TESTING_SSH_KEY }}
+          envs: IMAGE_TAG
+          script: |
+            set -euo pipefail
+            cd /opt/tasktracker
+            git fetch --depth=1 origin main && git reset --hard origin/main
+
+            echo "::group::pull images"
+            docker pull "ghcr.io/${{ github.repository_owner }}/task-tracker-api:${IMAGE_TAG}"
+            docker pull "ghcr.io/${{ github.repository_owner }}/task-tracker-scheduler:${IMAGE_TAG}"
+            echo "::endgroup::"
+
+            echo "::group::one-off migrate (aborts deploy on failure)"
+            docker run --rm \
+              --network tasktracker_backend \
+              -e SPRING_PROFILES_ACTIVE=production \
+              -e DB_HOST=postgres -e DB_PORT=5432 -e DB_NAME=tasktracker \
+              -e DB_USER="$(cat .secrets/db_user.txt)" \
+              -e DB_PASSWORD="$(cat .secrets/db_password.txt)" \
+              "ghcr.io/${{ github.repository_owner }}/task-tracker-api:${IMAGE_TAG}" migrate
+            echo "::endgroup::"
+
+            echo "::group::stack deploy (rolling, start-first)"
+            set -a; . ./.env.testing; set +a
+            export IMAGE_TAG
+            docker stack deploy -c docker-stack.yml --with-registry-auth tasktracker
+            echo "::endgroup::"
+
+            echo "::group::wait for readiness"
+            for i in $(seq 1 30); do
+              if curl -fsS http://localhost/actuator/health/readiness >/dev/null; then
+                echo "ready (try $i)"; exit 0
+              fi
+              sleep 2
+            done
+            echo "readiness never green — rolling back"
+            docker service rollback tasktracker_api
+            exit 1
+            echo "::endgroup::"
+
+  # Prod = promotion of a tested image, not a rebuild.
+  # Триггер:
+  #   а) workflow_dispatch с указанным promote_sha (рекомендованный путь) —
+  #      берём ИМЕННО тот sha, который CI задеплоил в testing и который прошёл
+  #      ручную / автоматическую проверку;
+  #   б) push тега v* — для release-сценария по semver.
+  # В обоих случаях прод НЕ пересобирает образ. Он pull-ит существующий тег
+  # из ghcr и катит его через `docker service update --image` (rolling).
+  deploy-prod:
+    needs: build
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: production   # GitHub Environments → "Required reviewers"
+    steps:
+      - name: Resolve image tag to promote
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "value=sha-${{ github.event.inputs.promote_sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: SSH deploy (migrate → stack deploy → smoke)
+        uses: appleboy/ssh-action@v1
+        env:
+          IMAGE_TAG: ${{ steps.tag.outputs.value }}
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_SSH_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          envs: IMAGE_TAG
+          script: |
+            set -euo pipefail
+            cd /opt/tasktracker
+            git fetch --tags --depth=1 origin
+            # checkout соответствующего ref'а (тег или main) для актуальных
+            # docker-stack.yml / nginx.conf / docker/app.sh.
+            git reset --hard "${IMAGE_TAG#sha-}" 2>/dev/null \
+              || git reset --hard "${IMAGE_TAG}" \
+              || git reset --hard origin/main
+
+            echo "::group::pre-deploy backup"
+            ./scripts/pg-backup.sh || { echo "BACKUP FAILED — aborting"; exit 1; }
+            echo "::endgroup::"
+
+            echo "::group::pull images"
+            docker pull "ghcr.io/${{ github.repository_owner }}/task-tracker-api:${IMAGE_TAG}"
+            docker pull "ghcr.io/${{ github.repository_owner }}/task-tracker-scheduler:${IMAGE_TAG}"
+            echo "::endgroup::"
+
+            echo "::group::one-off migrate"
+            docker run --rm \
+              --network tasktracker_backend \
+              -e SPRING_PROFILES_ACTIVE=production \
+              -e DB_HOST=postgres -e DB_PORT=5432 -e DB_NAME=tasktracker \
+              -e DB_USER="$(cat .secrets/db_user.txt)" \
+              -e DB_PASSWORD="$(cat .secrets/db_password.txt)" \
+              "ghcr.io/${{ github.repository_owner }}/task-tracker-api:${IMAGE_TAG}" migrate
+            echo "::endgroup::"
+
+            echo "::group::rolling deploy"
+            set -a; . ./.env.prod; set +a
+            export IMAGE_TAG
+            docker stack deploy -c docker-stack.yml --with-registry-auth tasktracker
+            echo "::endgroup::"
+
+            echo "::group::wait for readiness"
+            for i in $(seq 1 60); do
+              if curl -fsS http://localhost/actuator/health/readiness >/dev/null; then
+                echo "ready (try $i)"; exit 0
+              fi
+              sleep 2
+            done
+            echo "FAILED — rolling back"
+            docker service rollback tasktracker_api
+            docker service rollback tasktracker_scheduler
+            exit 1
+            echo "::endgroup::"

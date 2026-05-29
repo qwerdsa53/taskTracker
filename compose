@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Dockerfiles use RUN --mount; Compose builds need the buildx CLI plugin.
+set -euo pipefail
+if ! docker buildx version >/dev/null 2>&1; then
+	echo "Install docker buildx: https://docs.docker.com/build/buildx/install/" >&2
+	exit 1
+fi
+export DOCKER_BUILDKIT=1
+export COMPOSE_DOCKER_CLI_BUILD=1
+exec docker compose "$@"

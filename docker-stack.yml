@@ -1,0 +1,223 @@
+# Docker Swarm stack for task-tracker.
+#
+# One-time bootstrap (writes .secrets/*.txt and inits the swarm):
+#   ./scripts/swarm-bootstrap.sh
+# Deploy / update:
+#   docker stack deploy -c docker-stack.yml tasktracker
+# Rolling update to a new image tag (zero downtime via start-first + healthcheck):
+#   IMAGE_TAG=<sha> docker stack deploy -c docker-stack.yml tasktracker
+# Scale:
+#   docker service scale tasktracker_api=4
+# Inspect rolling deploy state:
+#   docker service ps tasktracker_api
+#
+# Spring Boot reads secrets via `spring.config.import: configtree:/run/secrets/`.
+# Each file at /run/secrets/<name> is exposed as Spring property `<name>`,
+# overriding the env-var fallback in application.yaml.
+
+services:
+
+  postgres:
+    image: postgres:16.4-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME:-tasktracker}
+      POSTGRES_USER_FILE: /run/secrets/db_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - backend
+    secrets:
+      - db_user
+      - db_password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$(cat /run/secrets/db_user) -d ${DB_NAME:-tasktracker}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+    stop_grace_period: 30s
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: any
+        delay: 5s
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    stop_grace_period: 15s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 5s
+      resources:
+        limits:
+          memory: 256M
+
+  api:
+    image: ghcr.io/qwerdsa53/task-tracker-api:${IMAGE_TAG:-latest}
+    environment:
+      SPRING_PROFILES_ACTIVE: production
+      SERVER_PORT: 8080
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-tasktracker}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      APP_MAIL_ENABLED: ${APP_MAIL_ENABLED:-false}
+      DDL_AUTO: validate
+      SHUTDOWN_TIMEOUT: 25s
+    networks:
+      - backend
+    # Spring Boot reads these via configtree:/run/secrets/ — files become
+    # properties: db_user, db_password, jwt_secret.
+    secrets:
+      - source: db_user
+        target: DB_USER
+      - source: db_password
+        target: DB_PASSWORD
+      - source: jwt_secret
+        target: JWT_SECRET
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health/readiness"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+    stop_grace_period: 30s
+    deploy:
+      replicas: ${API_REPLICAS:-3}
+      update_config:
+        # Rolling update: start the new replica BEFORE stopping the old one,
+        # so capacity never dips. Combined with the healthcheck (start-first
+        # only promotes the new task after readiness is healthy), this gives
+        # zero-downtime deploys. monitor>=stop_grace_period+start_period.
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        failure_action: rollback
+        monitor: 60s
+        max_failure_ratio: 0.0
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+        order: start-first
+        failure_action: pause
+      restart_policy:
+        condition: any
+        delay: 5s
+        window: 60s
+      resources:
+        limits:
+          memory: 768M
+        reservations:
+          memory: 384M
+
+  scheduler:
+    image: ghcr.io/qwerdsa53/task-tracker-scheduler:${IMAGE_TAG:-latest}
+    environment:
+      SERVER_PORT: 8081
+      SCHEDULER_SERVER_PORT: 8081
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-tasktracker}
+      DDL_AUTO: validate
+      TEMPORAL_ENABLED: ${TEMPORAL_ENABLED:-false}
+      SHUTDOWN_TIMEOUT: 25s
+    networks:
+      - backend
+    secrets:
+      - source: db_user
+        target: DB_USER
+      - source: db_password
+        target: DB_PASSWORD
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/actuator/health/readiness"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+    stop_grace_period: 30s
+    deploy:
+      # Scheduler holds jobs — keep at 1 replica unless leader election is added.
+      replicas: 1
+      update_config:
+        parallelism: 1
+        delay: 5s
+        order: stop-first
+        failure_action: rollback
+      restart_policy:
+        condition: any
+        delay: 5s
+      resources:
+        limits:
+          memory: 512M
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      # Swarm routing mesh — published port is reachable on every node.
+      - target: 80
+        published: ${SERVER_PORT:-8080}
+        protocol: tcp
+        mode: ingress
+    networks:
+      - backend
+    configs:
+      - source: nginx_conf
+        target: /etc/nginx/nginx.conf
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    stop_grace_period: 10s
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 5s
+        order: start-first
+      restart_policy:
+        condition: any
+        delay: 5s
+      resources:
+        limits:
+          memory: 128M
+
+networks:
+  backend:
+    driver: overlay
+    attachable: true
+
+volumes:
+  pgdata:
+
+configs:
+  nginx_conf:
+    file: ./nginx.conf
+
+secrets:
+  db_user:
+    file: ./.secrets/db_user.txt
+  db_password:
+    file: ./.secrets/db_password.txt
+  jwt_secret:
+    file: ./.secrets/jwt_secret.txt

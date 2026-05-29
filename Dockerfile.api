@@ -1,11 +1,13 @@
+# syntax=docker/dockerfile:1.7
+
+# ---------- Build stage: compile + bootJar ----------
 FROM eclipse-temurin:21-jdk-alpine AS build
 WORKDIR /app
 
 COPY gradlew .
 RUN chmod +x gradlew
 COPY gradle gradle
-COPY build.gradle.kts .
-COPY settings.gradle.kts .
+COPY build.gradle.kts settings.gradle.kts ./
 COPY task-tracker-common task-tracker-common
 COPY task-tracker-openapi task-tracker-openapi
 COPY task-tracker-api task-tracker-api
@@ -14,7 +16,50 @@ COPY task-tracker-scheduler task-tracker-scheduler
 RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
     ./gradlew :task-tracker-api:bootJar -x test --no-daemon
 
-FROM eclipse-temurin:21-jre-alpine
+# ---------- Layer extraction stage: split fat jar into layers ----------
+FROM eclipse-temurin:21-jre-alpine AS layers
 WORKDIR /app
 COPY --from=build /app/task-tracker-api/build/libs/task-tracker-api-*.jar app.jar
-ENTRYPOINT ["java", "-jar", "app.jar"]
+RUN java -Djarmode=tools -jar app.jar extract --layers --launcher --destination /app/extracted
+
+# ---------- Runtime stage: minimal Alpine JRE + tini for proper signal handling ----------
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+
+# tini = PID 1 that forwards SIGTERM/SIGINT to the JVM cleanly
+RUN apk add --no-cache tini curl \
+ && addgroup -S app && adduser -S app -G app \
+ && chown -R app:app /app
+
+USER app
+
+# Order matters: dependencies first (rarely changes -> cached), application last
+COPY --from=layers --chown=app:app /app/extracted/dependencies/ ./
+COPY --from=layers --chown=app:app /app/extracted/spring-boot-loader/ ./
+COPY --from=layers --chown=app:app /app/extracted/snapshot-dependencies/ ./
+COPY --from=layers --chown=app:app /app/extracted/application/ ./
+
+# 12-factor admin processes: one image, one classpath, one entrypoint that
+# selects the mode (server / migrate / create-admin / cache-clear).
+COPY --chown=app:app --chmod=755 docker/app.sh /app/app
+
+# JVM tuning for fast startup + container-aware memory + fail-fast on OOM
+ENV JAVA_TOOL_OPTIONS="\
+-XX:+UseContainerSupport \
+-XX:MaxRAMPercentage=75.0 \
+-XX:+ExitOnOutOfMemoryError \
+-XX:+AlwaysActAsServerClassMachine \
+-XX:TieredStopAtLevel=1 \
+-Djava.security.egd=file:/dev/./urandom \
+-Dspring.backgroundpreinitializer.ignore=true"
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=5 \
+  CMD curl -fsS http://localhost:8080/actuator/health/readiness || exit 1
+
+# tini = PID 1; wrapper dispatches `server` vs admin verbs.
+# Default CMD is `server`, so `docker run app` and `docker run app server` are equivalent.
+# Override per one-off task: `docker run --rm app:tag migrate`, etc.
+ENTRYPOINT ["/sbin/tini", "--", "/app/app"]
+CMD ["server"]

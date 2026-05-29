@@ -40,3 +40,4 @@ out/
 .env
 .env.local
 **/application-local.yaml
+.secrets/
