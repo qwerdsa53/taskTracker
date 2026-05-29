@@ -1,4 +1,7 @@
 services:
+
+  # Infrastructure
+
   redis:
     image: redis:7-alpine
     container_name: tasktracker-redis
@@ -48,6 +51,7 @@ services:
       - "${SERVER_PORT:-8080}:80"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./frontend:/usr/share/nginx/html:ro
     depends_on:
       - api
 
