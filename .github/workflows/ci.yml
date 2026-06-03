@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       promote_sha:
-        description: 'Git SHA already deployed to testing — promote that exact image to prod'
+        description: 'Git SHA to promote to prod (must already be built and pushed to ghcr)'
         required: true
 
 env:
@@ -50,10 +50,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Авто-теги по типу события:
-      #   push main      → :<sha>, :main, :latest
-      #   push tag v1.2  → :<sha>, :v1.2, :1.2 (semver), :latest
-      #   PR             → не пушится
       - name: Compute image tags (API)
         id: meta_api
         uses: docker/metadata-action@v5
@@ -100,7 +96,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Шаг 3: записываем версию образа и окружение в лог сборки
       - name: Log release info
         if: github.event_name == 'push'
         run: |
@@ -112,76 +107,13 @@ jobs:
           echo "| run | \`${{ github.run_number }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| branch | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
 
-  # 12-factor admin process: migrations run as a one-off container BEFORE deploy.
-  # Pipeline aborts (set -e) if migrate exits non-zero — no broken deploys.
-  deploy-testing:
-    needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    environment: testing
-    steps:
-      - name: SSH deploy (migrate → stack deploy → smoke check)
-        uses: appleboy/ssh-action@v1
-        env:
-          IMAGE_TAG: sha-${{ github.sha }}
-        with:
-          host: ${{ secrets.TESTING_HOST }}
-          username: ${{ secrets.TESTING_SSH_USER }}
-          key: ${{ secrets.TESTING_SSH_KEY }}
-          envs: IMAGE_TAG
-          script: |
-            set -euo pipefail
-            cd /opt/tasktracker
-            git fetch --depth=1 origin main && git reset --hard origin/main
-
-            echo "::group::pull images"
-            docker pull "ghcr.io/${{ github.repository_owner }}/task-tracker-api:${IMAGE_TAG}"
-            docker pull "ghcr.io/${{ github.repository_owner }}/task-tracker-scheduler:${IMAGE_TAG}"
-            echo "::endgroup::"
-
-            echo "::group::one-off migrate (aborts deploy on failure)"
-            docker run --rm \
-              --network tasktracker_backend \
-              -e SPRING_PROFILES_ACTIVE=production \
-              -e DB_HOST=postgres -e DB_PORT=5432 -e DB_NAME=tasktracker \
-              -e DB_USER="$(cat .secrets/db_user.txt)" \
-              -e DB_PASSWORD="$(cat .secrets/db_password.txt)" \
-              "ghcr.io/${{ github.repository_owner }}/task-tracker-api:${IMAGE_TAG}" migrate
-            echo "::endgroup::"
-
-            echo "::group::stack deploy (rolling, start-first)"
-            set -a; . ./.env.testing; set +a
-            export IMAGE_TAG
-            docker stack deploy -c docker-stack.yml --with-registry-auth tasktracker
-            echo "::endgroup::"
-
-            echo "::group::wait for readiness"
-            for i in $(seq 1 30); do
-              if curl -fsS http://localhost/actuator/health/readiness >/dev/null; then
-                echo "ready (try $i)"; exit 0
-              fi
-              sleep 2
-            done
-            echo "readiness never green — rolling back"
-            docker service rollback tasktracker_api
-            exit 1
-            echo "::endgroup::"
-
-  # Prod = promotion of a tested image, not a rebuild.
-  # Триггер:
-  #   а) workflow_dispatch с указанным promote_sha (рекомендованный путь) —
-  #      берём ИМЕННО тот sha, который CI задеплоил в testing и который прошёл
-  #      ручную / автоматическую проверку;
-  #   б) push тега v* — для release-сценария по semver.
-  # В обоих случаях прод НЕ пересобирает образ. Он pull-ит существующий тег
-  # из ghcr и катит его через `docker service update --image` (rolling).
   deploy-prod:
     needs: build
     if: |
       github.event_name == 'workflow_dispatch' ||
       startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    environment: production   # GitHub Environments → "Required reviewers"
+    environment: production
     steps:
       - name: Resolve image tag to promote
         id: tag
@@ -205,8 +137,6 @@ jobs:
             set -euo pipefail
             cd /opt/tasktracker
             git fetch --tags --depth=1 origin
-            # checkout соответствующего ref'а (тег или main) для актуальных
-            # docker-stack.yml / nginx.conf / docker/app.sh.
             git reset --hard "${IMAGE_TAG#sha-}" 2>/dev/null \
               || git reset --hard "${IMAGE_TAG}" \
               || git reset --hard origin/main
