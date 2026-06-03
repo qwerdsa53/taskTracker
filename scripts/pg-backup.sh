@@ -15,8 +15,8 @@ mkdir -p "$BACKUP_DIR"
 # Find the running postgres task (swarm container).
 PG_CID=$(docker ps --filter "name=tasktracker_postgres" --format '{{.ID}}' | head -1)
 if [ -z "$PG_CID" ]; then
-  echo "no running postgres container found" >&2
-  exit 1
+  echo "no running postgres container found — skipping backup (first deploy?)" >&2
+  exit 0
 fi
 
 DB_USER=$(cat .secrets/db_user.txt)
