@@ -156,14 +156,18 @@ jobs:
             echo "::endgroup::"
 
             echo "::group::wait for readiness"
-            for i in $(seq 1 60); do
-              if curl -fsS http://localhost/actuator/health/readiness >/dev/null; then
+            HEALTH_URL="http://localhost:${SERVER_PORT:-80}/actuator/health/readiness"
+            echo "Polling $HEALTH_URL ..."
+            for i in $(seq 1 90); do
+              STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 "$HEALTH_URL" 2>/dev/null || echo "000")
+              echo "  try $i: $STATUS"
+              if [ "$STATUS" = "200" ]; then
                 echo "ready (try $i)"; exit 0
               fi
-              sleep 2
+              sleep 3
             done
             echo "FAILED — rolling back"
-            docker service rollback tasktracker_api
-            docker service rollback tasktracker_scheduler
+            docker service rollback tasktracker_api || echo "rollback api: no previous spec (first deploy)"
+            docker service rollback tasktracker_scheduler || echo "rollback scheduler: no previous spec (first deploy)"
             exit 1
             echo "::endgroup::"
