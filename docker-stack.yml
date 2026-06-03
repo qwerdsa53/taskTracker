@@ -181,9 +181,11 @@ services:
         mode: ingress
     networks:
       - backend
-    configs:
-      - source: nginx_conf
+    volumes:
+      - type: bind
+        source: /opt/tasktracker/nginx.conf
         target: /etc/nginx/nginx.conf
+        read_only: true
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost/healthz"]
       interval: 10s
@@ -210,10 +212,6 @@ networks:
 
 volumes:
   pgdata:
-
-configs:
-  nginx_conf:
-    file: ./nginx.conf
 
 secrets:
   db_user:

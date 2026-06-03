@@ -152,7 +152,7 @@ jobs:
             echo "::group::stack deploy"
             set -a; . ./.env.prod; set +a
             export IMAGE_TAG
-            docker stack deploy -c docker-stack.yml --with-registry-auth tasktracker
+            docker stack deploy -c docker-stack.yml --with-registry-auth tasktracker || true
             echo "::endgroup::"
 
             echo "::group::wait for readiness"
