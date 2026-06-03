@@ -83,6 +83,7 @@ services:
       REDIS_PORT: 6379
       APP_MAIL_ENABLED: ${APP_MAIL_ENABLED:-false}
       DDL_AUTO: validate
+      SPRING_FLYWAY_ENABLED: "true"
       SHUTDOWN_TIMEOUT: 25s
     networks:
       - backend
