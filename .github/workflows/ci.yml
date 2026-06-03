@@ -155,25 +155,6 @@ jobs:
             docker stack deploy -c docker-stack.yml --with-registry-auth tasktracker
             echo "::endgroup::"
 
-            echo "::group::wait for postgres"
-            for i in $(seq 1 30); do
-              if docker exec $(docker ps --filter "name=tasktracker_postgres" --format '{{.ID}}' | head -1) pg_isready -U "$(cat .secrets/db_user.txt)" 2>/dev/null; then
-                echo "postgres ready (try $i)"; break
-              fi
-              sleep 2
-            done
-            echo "::endgroup::"
-
-            echo "::group::one-off migrate"
-            docker run --rm \
-              --network tasktracker_backend \
-              -e SPRING_PROFILES_ACTIVE=production \
-              -e DB_HOST=postgres -e DB_PORT=5432 -e DB_NAME=tasktracker \
-              -e DB_USER="$(cat .secrets/db_user.txt)" \
-              -e DB_PASSWORD="$(cat .secrets/db_password.txt)" \
-              "ghcr.io/${{ github.repository_owner }}/task-tracker-api:${IMAGE_TAG}" migrate
-            echo "::endgroup::"
-
             echo "::group::wait for readiness"
             for i in $(seq 1 60); do
               if curl -fsS http://localhost/actuator/health/readiness >/dev/null; then
